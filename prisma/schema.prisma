@@ -24,12 +24,14 @@ model User {
   id        String   @id @default(cuid())
   email     String   @unique
   phone     String?
-  name      String
+  name      String?  // collected during onboarding, not at first login
+  emailVerifiedAt DateTime?
   role      Role     @default(COLLECTOR)
   locale    String   @default("ht") // ht | fr | en
   createdAt DateTime @default(now())
 
   artist          Artist?
+  sessions        Session[]
   ownedWorks      Artwork[]         @relation("CurrentOwner")
   reviewsDone     Artist[]          @relation("VerifiedBy")
   eventsRecorded  ProvenanceEvent[] @relation("RecordedBy")
@@ -229,4 +231,30 @@ model ChainAnchor {
   createdAt  DateTime @default(now())
 
   events ProvenanceEvent[]
+}
+
+// ─────────────────────── Auth ───────────────────────
+// Passwordless login. Tokens and sessions are stored hashed, never raw.
+
+model LoginToken {
+  id        String    @id @default(cuid())
+  email     String
+  channel   String    @default("email") // "email" now, "sms" later
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([email, createdAt])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }

@@ -1,26 +1,47 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* Palette drawn from Haitian painting and drapo sequin work */
+@theme {
+  --color-ink: #1d2451;      /* deep indigo, text and primary buttons */
+  --color-paper: #f6f7fb;    /* cool white page */
+  --color-sun: #f2b705;      /* Jacmel yellow */
+  --color-sea: #0f7c8c;      /* Caribbean teal */
+  --color-hibiscus: #c2185b; /* drapo magenta, also used for errors */
+  --color-muted: #5a607d;    /* secondary text */
+
+  --font-display: var(--font-young-serif), Georgia, serif;
+  --font-body: var(--font-atkinson), system-ui, sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  background: var(--color-paper);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-size: 1.125rem; /* larger base size for older artists */
+  line-height: 1.6;
+}
+
+/* The one decorative element: a strip of "sequins" like a drapo border */
+.sequins {
+  height: 12px;
+  background:
+    radial-gradient(circle at 6px 6px, var(--color-sun) 4px, transparent 4.5px) 0 0 / 36px 12px,
+    radial-gradient(circle at 18px 6px, var(--color-hibiscus) 4px, transparent 4.5px) 0 0 / 36px 12px,
+    radial-gradient(circle at 30px 6px, var(--color-sea) 4px, transparent 4.5px) 0 0 / 36px 12px;
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-sun);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
 }
