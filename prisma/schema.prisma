@@ -44,6 +44,11 @@ enum ArtistStatus {
   SUSPENDED
 }
 
+enum VerificationMethod {
+  IN_PERSON
+  VIDEO
+}
+
 model Artist {
   id           String       @id @default(cuid())
   userId       String       @unique
@@ -59,6 +64,8 @@ model Artist {
   verifiedAt   DateTime?
   verifiedById String?
   verifiedBy   User?        @relation("VerifiedBy", fields: [verifiedById], references: [id])
+  verificationMethod VerificationMethod?
+  verificationNote   String? // reviewer's note, never shown publicly
   createdAt    DateTime     @default(now())
 
   artworks Artwork[]
