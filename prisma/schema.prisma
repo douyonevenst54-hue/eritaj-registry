@@ -1,0 +1,232 @@
+// Eritaj Registry — provenance registry for works by living Haitian artists
+// Phase 1: off-chain registry + per-artwork hash chain. On-chain anchoring/minting comes later.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─────────────────────────── People ───────────────────────────
+
+enum Role {
+  ARTIST
+  COLLECTOR
+  REVIEWER // trusted volunteer who verifies artists in person / by video
+  ADMIN
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  phone     String?
+  name      String
+  role      Role     @default(COLLECTOR)
+  locale    String   @default("ht") // ht | fr | en
+  createdAt DateTime @default(now())
+
+  artist          Artist?
+  ownedWorks      Artwork[]         @relation("CurrentOwner")
+  reviewsDone     Artist[]          @relation("VerifiedBy")
+  eventsRecorded  ProvenanceEvent[] @relation("RecordedBy")
+  disputesOpened  Dispute[]
+}
+
+enum ArtistStatus {
+  PENDING   // signed up, not yet verified
+  VERIFIED  // identity confirmed by a reviewer
+  SUSPENDED
+}
+
+model Artist {
+  id           String       @id @default(cuid())
+  userId       String       @unique
+  user         User         @relation(fields: [userId], references: [id])
+  displayName  String       // name they sign works with
+  birthYear    Int?
+  hometown     String?      // e.g. "Jacmel", "Croix-des-Bouquets"
+  bioHt        String?
+  bioFr        String?
+  bioEn        String?
+  photoUrl     String?
+  status       ArtistStatus @default(PENDING)
+  verifiedAt   DateTime?
+  verifiedById String?
+  verifiedBy   User?        @relation("VerifiedBy", fields: [verifiedById], references: [id])
+  createdAt    DateTime     @default(now())
+
+  artworks Artwork[]
+}
+
+// ─────────────────────────── Works ───────────────────────────
+
+enum Medium {
+  PAINTING
+  SCULPTURE
+  METALWORK   // fè koupe / cut-steel
+  SEQUIN_FLAG // drapo
+  MIXED_MEDIA
+  TEXTILE
+  CERAMIC
+  OTHER
+}
+
+enum ArtworkStatus {
+  DRAFT      // artist still filling it in
+  SUBMITTED  // waiting for review
+  REGISTERED // public record exists
+  DISPUTED
+  WITHDRAWN
+}
+
+model Artwork {
+  id             String        @id @default(cuid())
+  registryNumber String        @unique // ERT-2026-000001, assigned at registration
+  artistId       String
+  artist         Artist        @relation(fields: [artistId], references: [id])
+  title          String
+  titleHt        String?
+  yearCreated    Int?
+  medium         Medium
+  widthCm        Decimal?      @db.Decimal(7, 1)
+  heightCm       Decimal?      @db.Decimal(7, 1)
+  depthCm        Decimal?      @db.Decimal(7, 1)
+  description    String?
+  status         ArtworkStatus @default(DRAFT)
+
+  // Private by default: the public page shows "privately held", never who.
+  currentOwnerId String?
+  currentOwner   User?         @relation("CurrentOwner", fields: [currentOwnerId], references: [id])
+  ownerIsPublic  Boolean       @default(false)
+
+  // Hash of the registration snapshot (images + declaration + core fields)
+  contentHash    String?
+  registeredAt   DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  images      ArtworkImage[]
+  declaration ArtistDeclaration?
+  events      ProvenanceEvent[]
+  disputes    Dispute[]
+
+  @@index([artistId])
+  @@index([status])
+}
+
+enum ImageKind {
+  FRONT
+  BACK
+  SIGNATURE
+  DETAIL
+  ARTIST_WITH_WORK // required: the artist holding the piece
+}
+
+model ArtworkImage {
+  id        String    @id @default(cuid())
+  artworkId String
+  artwork   Artwork   @relation(fields: [artworkId], references: [id], onDelete: Cascade)
+  kind      ImageKind
+  url       String
+  sha256    String    // hash of the original file bytes
+  createdAt DateTime  @default(now())
+
+  @@index([artworkId])
+}
+
+// The artist's own signed statement. The registry records declarations;
+// it does NOT claim to authenticate.
+model ArtistDeclaration {
+  id              String   @id @default(cuid())
+  artworkId       String   @unique
+  artwork         Artwork  @relation(fields: [artworkId], references: [id], onDelete: Cascade)
+  statementLocale String   // language the artist signed in
+  statementText   String
+  signedName      String
+  signedAt        DateTime @default(now())
+  declarationHash String
+}
+
+// ─────────────────────── Provenance chain ───────────────────────
+// Same pattern as your PPA ledger: each event links to the previous
+// event for that artwork. Altering history breaks the chain.
+
+enum EventType {
+  CREATED
+  REGISTERED
+  SOLD
+  GIFTED
+  INHERITED
+  LOANED
+  EXHIBITED
+  RETURNED
+  DISPUTE_OPENED
+  DISPUTE_RESOLVED
+  CORRECTION
+}
+
+model ProvenanceEvent {
+  id           String    @id @default(cuid())
+  artworkId    String
+  artwork      Artwork   @relation(fields: [artworkId], references: [id])
+  type         EventType
+  occurredAt   DateTime  // when it happened in the real world
+  location     String?   // city/venue; public-safe granularity only
+  publicNote   String?
+  privateNote  String?   // parties, prices — never on the public page
+  recordedById String
+  recordedBy   User      @relation("RecordedBy", fields: [recordedById], references: [id])
+
+  seq          Int       // 0, 1, 2… per artwork
+  prevHash     String    // "0" * 64 for the first event
+  rowHash      String    @unique
+  anchorId     String?
+  anchor       ChainAnchor? @relation(fields: [anchorId], references: [id])
+  createdAt    DateTime  @default(now())
+
+  @@unique([artworkId, seq])
+  @@index([anchorId])
+}
+
+// ─────────────────────── Disputes ───────────────────────
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  UPHELD    // record corrected / flagged
+  REJECTED
+}
+
+model Dispute {
+  id         String        @id @default(cuid())
+  artworkId  String
+  artwork    Artwork       @relation(fields: [artworkId], references: [id])
+  openedById String
+  openedBy   User          @relation(fields: [openedById], references: [id])
+  reason     String
+  evidence   String?
+  status     DisputeStatus @default(OPEN)
+  resolution String?
+  createdAt  DateTime      @default(now())
+  resolvedAt DateTime?
+}
+
+// ─────────────────────── On-chain anchoring (Phase 2) ───────────────────────
+// A batch job builds a Merkle root of new event hashes and writes it on-chain.
+// Chain choice stays open; this table only stores the proof.
+
+model ChainAnchor {
+  id         String   @id @default(cuid())
+  chain      String   // "base" | "polygon" | "stellar" …
+  merkleRoot String   @unique
+  txHash     String?
+  eventCount Int
+  anchoredAt DateTime?
+  createdAt  DateTime @default(now())
+
+  events ProvenanceEvent[]
+}
