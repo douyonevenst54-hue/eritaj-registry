@@ -14,6 +14,11 @@ export default async function DashboardPage() {
     canReview ? prisma.artist.count({ where: { status: "PENDING" } }) : Promise.resolve(0),
   ]);
 
+  const workCount =
+    artist?.status === "VERIFIED"
+      ? await prisma.artwork.count({ where: { artistId: artist.id, status: "REGISTERED" } })
+      : 0;
+
   return (
     <section>
       <h1 className="font-display text-3xl">Byenvini{user.name ? `, ${user.name}` : ""}</h1>
@@ -23,6 +28,15 @@ export default async function DashboardPage() {
       <p className="mt-1 text-muted">Wòl: {roleLabel[user.role] ?? user.role}</p>
 
       <div className="mt-10 space-y-4">
+        {artist?.status === "VERIFIED" && (
+          <Link href="/works" className={linkClass}>
+            Zèv mwen yo
+            <span className="block font-normal text-base opacity-80">
+              {workCount === 0 ? "Anrejistre premye zèv ou" : `${workCount} anrejistre`}
+            </span>
+          </Link>
+        )}
+
         {artist ? (
           <Link href="/artist" className={linkClass}>
             Pwofil atis ou

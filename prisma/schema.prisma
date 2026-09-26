@@ -94,7 +94,7 @@ enum ArtworkStatus {
 
 model Artwork {
   id             String        @id @default(cuid())
-  registryNumber String        @unique // ERT-2026-000001, assigned at registration
+  registryNumber String?       @unique // ERT-2026-000001, assigned at registration (null while DRAFT)
   artistId       String
   artist         Artist        @relation(fields: [artistId], references: [id])
   title          String
@@ -264,4 +264,10 @@ model Session {
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+// Sequential registry numbers per year: ERT-2026-000001, ERT-2026-000002…
+model RegistryCounter {
+  year Int @id
+  last Int @default(0)
 }
